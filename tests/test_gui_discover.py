@@ -81,6 +81,8 @@ class T(unittest.TestCase):
         self.t.analyze()
         self.assertEqual(self.errs(), [])
         self.assertGreater(len(self.t.tv.rows), 10)
+        self.assertEqual(self.t.progress.value.get(), 100)
+        self.assertIn("Analysis complete", self.t.progress.message.get())
         self.assertTrue(any("UE-Entdecker" in m for k, m in self.w.logs if k == "ok"))
         self.t.v_kind.set("Item-Struct"); self.t.fill()
         self.assertEqual([s.kind for s in self.t.view], ["item_struct"] * len(self.t.view))
