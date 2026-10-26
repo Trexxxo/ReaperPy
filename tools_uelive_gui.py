@@ -394,7 +394,10 @@ class UeLiveTab(BaseTab):
             else:
                 report("Resolving matching instances…")
             rows = Q.find_instances(
-                live, cur, progress=lambda n, total: report("Indexing Unreal objects", n, total)
+                live, cur,
+                progress=lambda n, total: report("Indexing Unreal objects", n, total),
+                match_progress=lambda n, total: report("Scanning runtime objects", n, total),
+                phase=lambda stage: report(stage),
             )
             if rows:
                 report("Reading live values", 0, len(rows))
