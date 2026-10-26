@@ -306,10 +306,10 @@ def connect_live(client, proj, log=print, cached=None):
     return live
 
 
-def find_instances(live, t, limit=400):
+def find_instances(live, t, limit=400, progress=None):
     """Alle Live-Instanzen der Klasse von t -> [{addr, name, class, vaddr}] (Index wird einmal gebaut)."""
     if live.index is None:
-        live.build_index()
+        live.build_index(progress=progress)
     rows = []
     off = t.offset
     try:  # Offset live aus dem Spiel lesen (Header koennen zu einer anderen Version gehoeren)
