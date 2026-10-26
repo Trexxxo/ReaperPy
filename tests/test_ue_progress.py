@@ -35,13 +35,17 @@ class ProgressTests(unittest.TestCase):
     def test_find_instances_reports_actual_index_completion(self):
         _mem, _ref, sdk, client = world()
         live = Q.connect_live(client, Proj(sdk), log=lambda message: None)
-        reports = []
+        reports, matching = [], []
         hits = Q.find_instances(
-            live, tgt(sdk, "Health"), progress=lambda done, total: reports.append((done, total))
+            live, tgt(sdk, "Health"),
+            progress=lambda done, total: reports.append((done, total)),
+            match_progress=lambda done, total: matching.append((done, total)),
         )
         self.assertTrue(hits)
         self.assertTrue(reports)
         self.assertEqual(reports[-1], (live.num_elements, live.num_elements))
+        self.assertTrue(matching)
+        self.assertEqual(matching[-1], (len(live.index), len(live.index)))
         self.assertIsNotNone(live.index)
 
 
