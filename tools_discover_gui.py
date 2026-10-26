@@ -17,6 +17,7 @@ from tkinter import filedialog, messagebox, simpledialog, ttk
 import cave_trainer as TR
 import ue_cavegen as CG
 import ue_profile as P
+from tools_progress import TaskProgress
 from tools_common import BG, TEXT_DIM, BaseTab, button, entry, label, tree, with_scroll
 
 def _find_impl(read, base, thunk):
@@ -46,6 +47,7 @@ class DiscoverTab(BaseTab):
         self.v_cnt = tk.StringVar()
         self.hits = []
         self._busy = False
+        self._analyze_serial = 0  # invalidate queued updates from previous analysis
         self.v_amount = tk.StringVar(value="999")
         self.v_this = tk.StringVar(value="auto")
         self.v_byref = tk.BooleanVar(value=False)
@@ -68,6 +70,8 @@ class DiscoverTab(BaseTab):
         button(top, "BERICHT SPEICHERN…", self.save_report).pack(side="left", padx=8)
         button(top, "IN UE-LIVE ÖFFNEN", self.open_in_live).pack(side="left", padx=2)
         tk.Label(self, textvariable=self.v_info, bg=BG, fg=TEXT_DIM, anchor="w").pack(fill="x", padx=10)
+        self.progress = TaskProgress(self)
+        self.progress.pack(fill="x", padx=10, pady=(2, 4))
 
         mid = tk.PanedWindow(self, orient="vertical", bg=BG, sashwidth=4)
         mid.pack(fill="both", expand=True, padx=8, pady=4)
@@ -154,8 +158,11 @@ class DiscoverTab(BaseTab):
     def analyze(self, force=False):
         sdk = self._sdk()
         if sdk is None:
+            self.progress.fail("Load a game folder in UE-LIVE first.")
             self.log("Kein SDK geladen - im Tab UE-LIVE den SPIEL-ORDNER waehlen", "err")
             return
+        self._analyze_serial += 1
+        serial = self._analyze_serial
         gp = self._gp()
         sig = P.signature(sdk)
         if gp is not None and not force and gp.discover and gp.discover.get("sig") == sig:
@@ -165,15 +172,36 @@ class DiscoverTab(BaseTab):
                 prof = None
             if prof is not None:
                 self._analyzed(prof, cached=True)
+                self.progress.finish("Loaded saved SDK analysis (100%)")
                 return
         self.v_info.set("Analysiere SDK …")
+        self.progress.start("Preparing SDK analysis…")
+
+        def on_progress(step, total, kind):
+            # P.build already reports each actual analysis step.
+            stage = P.KIND_LABEL.get(kind, kind)
+            def show():
+                if serial == self._analyze_serial:
+                    self.progress.update(step, total, f"Analyzing {stage}")
+            self.win.ui(show)
 
         def done(prof):
+            if serial != self._analyze_serial:
+                return
             if gp is not None:                                  # fuer das naechste Mal merken
                 gp.discover = {"sig": sig, "json": P.to_json(prof)}
                 gp.save()
             self._analyzed(prof)
-        self.bg(lambda: P.build(sdk), done, lambda e: self.log(f"Analyse fehlgeschlagen: {e}", "err"))
+            self.progress.finish(f"Analysis complete — {len(prof.suggestions)} suggestions (100%)")
+
+        def failed(error):
+            if serial != self._analyze_serial:
+                return
+            self.progress.fail(f"Analysis failed: {error}")
+            self.v_info.set(f"Analysis failed: {error}")
+            self.log(f"Analyse fehlgeschlagen: {error}", "err")
+
+        self.bg(lambda: P.build(sdk, progress=on_progress), done, failed)
 
     def reanalyze(self):
         self.analyze(force=True)
