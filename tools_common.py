@@ -148,6 +148,10 @@ def _attach_context_menu(t, columns, actions, details):
         messagebox.showinfo("Eigenschaften", text, parent=t)
 
     def popup(event):
+        # Popup menus are created on demand and are not part of the widget tree
+        # translated by apply_to(). Resolve the current language on every click.
+        from tools_i18n import translate
+
         m = None
         try:
             iid = t.identify_row(event.y)
@@ -159,11 +163,11 @@ def _attach_context_menu(t, columns, actions, details):
                 if text is None:
                     m.add_separator()
                 else:
-                    m.add_command(label=text, command=fn)
+                    m.add_command(label=translate(text), command=fn)
             if iid:
                 if actions:
                     m.add_separator()
-                m.add_command(label="Eigenschaften...", command=lambda: show_props(iid))
+                m.add_command(label=translate("Eigenschaften..."), command=lambda: show_props(iid))
             m.tk_popup(event.x_root, event.y_root)
         finally:
             if m is not None:
