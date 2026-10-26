@@ -467,6 +467,8 @@ class UELive:
             outers[ptr] = _u64(hdr, self.o_outer)
             rflags[ptr] = _u32(hdr, 8)  # UObject.ObjectFlags (RF_ClassDefaultObject 0x10, RF_ArchetypeObject 0x20)
         self.index, self.outers, self.rflags = idx, outers, rflags
+        if progress:
+            progress(n_total, n_total)  # report completion even when the last object slots are empty
         return idx
 
     def is_template(self, ptr):
