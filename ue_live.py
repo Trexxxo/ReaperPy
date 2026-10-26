@@ -552,17 +552,22 @@ class UELive:
             if nm.startswith("Default__") and (cl == cls or cls in self.ancestors(cl))
         )
 
-    def instances(self, sdk_name, subclasses=True, include_defaults=False):
+    def instances(self, sdk_name, subclasses=True, include_defaults=False, progress=None):
         """Alle Instanzen einer Klasse -> [{addr, index, name, class}]"""
         cls = self.find_class(sdk_name)
         if not cls:
             return []
         out = []
-        for key, (i, cl, nm) in self.index.items():
+        total = max(1, len(self.index))
+        for scanned, (key, (i, cl, nm)) in enumerate(self.index.items(), 1):
+            if progress and scanned % 2000 == 0:
+                progress(scanned, total)
             if not include_defaults and (nm.startswith("Default__") or self.is_template(key)):
                 continue
             if cl == cls or (subclasses and cls in self.ancestors(cl)):
                 out.append({"addr": key, "index": i, "name": nm, "class": self.index.get(cl, (0, 0, "?"))[2]})
+        if progress:
+            progress(total, total)
         for item in out[:500]:  # Besitzer (Outer) dazu: "CHA_Xaurip_C_123" statt nur "AttributeSetCore"
             try:
                 outer = self.outer(item["addr"])
