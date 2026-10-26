@@ -15,6 +15,7 @@ import tkinter as tk
 from tkinter import filedialog, simpledialog, ttk
 
 import ue_quick as Q
+from tools_progress import TaskProgress
 from tools_common import ACCENT, BG, FONT_LABEL, TEXT_DIM, WARN, BaseTab, button, entry, label, tree, with_scroll
 
 CFG = os.path.join(os.path.expanduser("~"), ".reaperpy_uelive.json")
@@ -51,6 +52,7 @@ class UeLiveTab(BaseTab):
         self.freezer = Q.Freezer()
         self._busy = False
         self._pending = None
+        self._find_serial = 0  # ignore progress/results from an older selection
         self._cfg = _load_cfg()
 
         top = tk.Frame(self, bg=BG)
@@ -95,6 +97,8 @@ class UeLiveTab(BaseTab):
         pan.add(right, weight=3)
         self.lbl_cur = label(right, "← links einen Wert anklicken", dim=False)
         self.lbl_cur.pack(anchor="w")
+        self.progress = TaskProgress(right)
+        self.progress.pack(fill="x", padx=4, pady=(2, 3))
         fr2 = tk.Frame(right, bg=BG)
         fr2.pack(fill="x", pady=2)
         self.v_live = tk.BooleanVar(value=True)
@@ -279,6 +283,8 @@ class UeLiveTab(BaseTab):
         self.lbl_cur.configure(text=f"{self.cur.key}  [{self.cur.type}]  - suche Instanzen im Spiel …", fg=WARN)
         self._build_quick(self.cur)
         self._cancel_pending()
+        self._find_serial += 1
+        self.progress.start("Preparing instance scan…")
         self._pending = self.after(250, self.refind)  # kurz warten, falls man durch die Liste scrollt
 
     def _cancel_pending(self):
@@ -346,9 +352,26 @@ class UeLiveTab(BaseTab):
         cur = self.cur
         client = self.win.client
         if cur is None or not self.proj:
+            self.progress.fail("Select a value after loading the game.")
             return self.log("UE-LIVE: erst Spiel laden und einen Wert anklicken", "warn")
         if client is None:
+            self.progress.fail("Not connected to the PS5.")
             return self.log("UE-LIVE: nicht verbunden (Haupt-Fenster: VERBINDEN)", "err")
+
+        self._find_serial += 1
+        serial = self._find_serial
+        self.progress.start("Connecting to game and locating objects…")
+
+        def report(stage, done=None, total=None):
+            """Only update Tk on the UI thread; discard queued events for obsolete scans."""
+            def show():
+                if serial != self._find_serial:
+                    return
+                if done is None:
+                    self.progress.activity(stage)
+                else:
+                    self.progress.update(done, total, stage)
+            self.win.ui(show)
 
         def job():
             live = Q.connect_live(
@@ -366,15 +389,25 @@ class UeLiveTab(BaseTab):
                         "info",
                     )
                 )
-            rows = Q.find_instances(live, cur)
+            if live.index is None:
+                report("Indexing Unreal objects", 0, max(1, live.num_elements))
+            else:
+                report("Resolving matching instances…")
+            rows = Q.find_instances(
+                live, cur, progress=lambda n, total: report("Indexing Unreal objects", n, total)
+            )
+            if rows:
+                report("Reading live values", 0, len(rows))
             if not rows:
                 why = Q.explain_no_instances(live, cur)
                 self.win.ui(lambda: self.log(f"UE-LIVE: {why}", "warn"))
-            for row in rows:
+            for i, row in enumerate(rows, 1):
                 try:
                     row["val"], row["txt"] = Q.read_value(client.read_memory, row["vaddr"], cur)
                 except Exception:
                     row["val"], row["txt"] = None, "?"
+                if i % 10 == 0 or i == len(rows):
+                    report("Reading live values", i, len(rows))
             rows.sort(
                 key=lambda r: (
                     "player" not in (r.get("owner", "") + r["name"]).lower(),  # Spieler zuerst
@@ -386,8 +419,9 @@ class UeLiveTab(BaseTab):
             return rows
 
         def ok(rows):
-            if cur is not self.cur:
+            if serial != self._find_serial or cur is not self.cur:
                 return
+            self.progress.finish(f"Scan complete — {len(rows)} instance(s) found")
             self.rows = rows
             self._render()
             nz = sum(1 for row in rows if row["val"] is not None and not Q.is_zero(row["val"]))
@@ -396,14 +430,14 @@ class UeLiveTab(BaseTab):
                 fg=ACCENT if rows else WARN,
             )
 
-        self.bg(
-            job,
-            ok,
-            lambda e: (
-                self.lbl_cur.configure(text=f"{cur.key}  -  Fehler", fg="#ff3366"),
-                self.log(f"UE-LIVE: {e}", "err"),
-            ),
-        )
+        def failed(error):
+            if serial != self._find_serial:
+                return
+            self.progress.fail(f"Instance scan failed: {error}")
+            self.lbl_cur.configure(text=f"{cur.key}  -  Fehler", fg="#ff3366")
+            self.log(f"UE-LIVE: {error}", "err")
+
+        self.bg(job, ok, failed)
 
     def _visible(self):
         return list(range(len(self.rows)))  # keine Filter: jede gefundene Instanz wird gezeigt
