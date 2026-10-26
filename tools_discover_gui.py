@@ -198,7 +198,7 @@ class DiscoverTab(BaseTab):
             if serial != self._analyze_serial:
                 return
             self.progress.fail(f"Analysis failed: {error}")
-            self.v_info.set(f"Analysis failed: {error}")
+            self.v_info.set(f"Analyse fehlgeschlagen: {error}")
             self.log(f"Analyse fehlgeschlagen: {error}", "err")
 
         self.bg(lambda: P.build(sdk, progress=on_progress), done, failed)
