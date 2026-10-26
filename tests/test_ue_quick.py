@@ -120,6 +120,8 @@ class GuiFlow(unittest.TestCase):
     def test_click_shows_live_values_and_sets(self):
         t = self.t; self.pick("UHealthComponent.Health")
         self.assertEqual(len(t.rows), 2, self.win.logs)
+        self.assertEqual(t.progress.value.get(), 100)
+        self.assertIn("Scan complete", t.progress.message.get())
         self.assertEqual(t.rows[0]["txt"], "75.5")                             # nichtnull zuerst
         t.tr.sel = ("0",); t.v_val.set("999"); t.set_value()
         self.assertEqual(struct.unpack("<f", self.im.read(self.ref["p1"] + 0x80, 4))[0], 999.0, self.win.logs)
